@@ -1,0 +1,163 @@
+Adversarial Learning for Robust Deep Clustering
+
+实现代码非本人写的，来源地址：https://github.com/xdxuyang/ALRDC
+
+个人阅读代码理解结构和运行过程，注释中添加了部分个人中文理解
+
+
+
+运行要求
+
+To run Model, you'll need Python 3.x and the following python packages:
+
+- scikit-learn
+
+- tensorflow == 1.2.0
+
+- keras == 2.2.4
+
+  
+
+项目结构
+
+─src
+    ├─applications
+    │  │  ADDC.py       
+    │  │  MNIST_64.h5
+    │  │  MNIST_ADV_64.h5
+    │  │  plot_2d.py
+    │  │  run.py              
+    │  │  stl64.h5
+    │  │  
+    │  └─__pycache__
+    │          
+    └─core
+        │  Conv.py
+        │  convert_idxs.pyx
+        │  costs.py
+        │  data.py
+        │  layer.py
+        │  pairs.py
+        │  train.py
+        │  util.py
+        │  
+        └─__pycache__
+
+数据集
+
+选择MNIST和Fashion-MNIST作为数据集。考虑到聚类任务是完全无监督的，将训练和测试样本串联起来。MNIST[[18](#_bookmark44)]：包含总共70,000个手写数字，有60,000个训练样本和10,000个测试样本，每个样本都是28个单色图像。Fashi- MNIST [[31](#_bookmark57)]：拥有与MNIST相同数量的图像，图像大小也相同，但相当复杂。Fashion-MNIST不是由数字组成，而是由各种类型的时尚产品组成。
+
+
+
+ 聚类指标
+
+​	ACC准确性 
+
+​	NMI检测分布相似性
+
+​	混淆矩阵查看分类正确性
+
+
+
+运行代码的运行过程，主要功能模块的交互以及步骤作用
+
+run.py               
+
+​	选择GPU，超参数，数据集参数  
+
+​	调用ADDC,run_net(data, params)  传入数据集 和 网络，数据集参数
+
+
+
+ADDC.py
+
+​	初始化数据，网络
+
+​		分割训练集，验证集
+
+​		向ConvAE传入数据格式和网络参数，并初始化网络节点权重
+
+​		初始化各种参数，评价指标
+
+
+
+​	进行每个batch训练
+
+​		数据加入，前向传播，调用ConvAE内各个子模型
+
+​			x_val   -> |encoder| ->  x_val_t 
+
+​			x_val   ->  |Advsior| ->  x_val_t1
+
+​													  x_val_t   -> |classfier| -> x_sp      -> |argmax函数|-> y_sp
+
+​									x_val_t1 + x_val_t   -> |classfier| -> x_val_y -> |argmax函数|-> y_sp_1
+
+​													 x_val_t    ->|decoder|  ->  x_val_1
+
+​													 x_val_t1  ->|decoder|  ->  x_val_2
+
+​		根据数据计算ACC和混淆矩阵(对角线代表分类正确)，输出以用来判断模型分类正确性
+
+​		调整模型参数，调用ConvAE.train_defense
+
+​			通过内部self.loss_defense计算得到return_var，updates同理
+
+​			调用train_vae_step，参数调整为all_vars， K.get_session().run调整
+
+​			self.train_step1是ConvAE.train_defense
+
+​			self.train_step2是ConvAE.train_Advsior
+
+​		计算NMI互信息，查看分布相似度
+
+​		如果整体vae前后两次losses小于0.0001则退出循环
+
+
+
+​	评估最终模型性能
+
+​		可视化，对于现在模型编码器得到的x_val_t进行散点图绘制
+
+​		输出模型最终的ACC,NMI
+
+
+
+
+
+网络结构
+
+​	Advsior  通过原始数据，对生成的固定向量形式，自动形成一个微小偏移
+
+​	decoder  将生成的固定向量再转化成输出序列
+
+​	classfier  将生成的固定向量聚类
+
+​	encoder 将输入序列转化成一个固定长度的向量
+
+​	vae  variational-autoencoders 以上模型的总和	
+
+​	module_loss 
+
+​	adv_loss
+
+​	Discriminator 局部互信息的估计网络
+
+​	loss_defense
+
+​	self.learningrate  学习率
+
+​	self.train_step1 训练防守策略，调整参数
+
+​	self.train_step2  训练攻击策略，调整Advsior参数
+
+
+
+输入输出
+
+​	模型可以输出，经过对抗网络和不经过的分类结果，解码原图像以便保证一致性
+
+​	
+
+
+
